@@ -27,7 +27,7 @@ def _get_login_page(session, url):
     # return page text
     req = session.get(url)
     # if last login exists, it will go to error page. so ignore it
-    if '<div id="login-form">' in req.text:
+    if 'login-form' in req.text:
         return req.text
     else:
         raise RetryRequest  # make it retry
