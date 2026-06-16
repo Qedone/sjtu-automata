@@ -42,8 +42,9 @@ def _bypass_captcha(session, url, useocr):
 
     if useocr:
         code = autocaptcha('captcha.jpeg').strip()
-        if not code.isalpha():
-            code = '1234'   # cant recongnize, go for next round
+        # SJTU captcha is 4 alphanumeric chars (letters + digits)
+        if not code or len(code) < 4:
+            code = '1234'   # cant recognize, go for next round
     else:
         img = Image.open('captcha.jpeg')
         img.show()
@@ -60,18 +61,37 @@ def _login(session, sid, returl, se, client, username, password, code, uuid):
     req = session.post(
         'https://jaccount.sjtu.edu.cn/jaccount/ulogin', data=data)
 
-    # result
-    # be careful return english version website in english OS
+    # Try JSON response first (new JAccount API format)
+    try:
+        result = req.json()
+        errno = result.get('errno', -1)
+        error_code = result.get('code', '')
+        error_msg = result.get('error', '')
+
+        if errno == 0:
+            return 0  # login success
+        if error_code == 'WRONG_CAPTCHA' or '验证码' in error_msg:
+            return 2  # wrong captcha
+        if error_code == 'WRONG_CREDENTIAL' or '用户名' in error_msg or '密码' in error_msg:
+            return 1  # wrong credential
+        # fallback: check errno for other known errors
+        if errno == 1:
+            return 1
+        raise AutomataError(f'Unexpected JSON response: {result}')
+    except ValueError:
+        pass  # not JSON, fallback to legacy HTML parsing
+
+    # Legacy HTML-based detection (fallback)
     if '请正确填写验证码' in req.text or 'wrong captcha' in req.text:
         return 2
     elif '请正确填写你的用户名和密码' in req.text or 'wrong username or password' in req.text:
         return 1
     elif '30秒后' in req.text:  # 30s ban
         return 3
-    elif '<i class="fa fa-gear" aria-hidden="true" id="wdyy_szbtn">':
+    elif '<i class="fa fa-gear" aria-hidden="true" id="wdyy_szbtn">' in req.text:
         return 0
     else:
-        raise AutomataError
+        raise AutomataError(f'Unexpected response, first 500 chars: {req.text[:500]}')
 
 
 def login(url, useocr=False):
@@ -94,15 +114,8 @@ def login(url, useocr=False):
         while True:
             session = _create_session()
             req = _get_login_page(session, url)
-            captcha_id = re_search(r'img.src = \'captcha\?(.*)\'', req)
-            if not captcha_id:
-                print('Captcha not found! Retrying...')
-                sleep(3)
-                continue
-            captcha_id += get_timestamp()
-            captcha_url = 'https://jaccount.sjtu.edu.cn/jaccount/captcha?' + captcha_id
-            code = _bypass_captcha(session, captcha_url, useocr)
 
+            # Extract all params first, before constructing captcha URL
             sid = re_search(r'sid: "(.*?)"', req)
             returl = re_search(r'returl:"(.*?)"', req)
             se = re_search(r'se: "(.*?)"', req)
@@ -112,6 +125,10 @@ def login(url, useocr=False):
                 print('Params not found! Retrying...')
                 sleep(3)
                 continue
+
+            # Construct captcha URL with fresh timestamp (replace, not append)
+            captcha_url = 'https://jaccount.sjtu.edu.cn/jaccount/captcha?uuid=' + uuid + '&t=' + get_timestamp()
+            code = _bypass_captcha(session, captcha_url, useocr)
 
             res = _login(session, sid, returl, se, client,
                          username, password, code, uuid)
