@@ -25,12 +25,14 @@ V2协议分析：<https://github.com/MXWXZ/sjtu-automata/blob/master/Protocol%20
 Linux > macOS > Windows
 
 ## 安装
-    
-    pip3 install sjtu-automata
-
-## 升级
-
-    pip3 install sjtu-automata --upgrade
+1. 请先手动安装必备的网络请求库：
+```Bash
+pip3 install requests
+```
+2. 从 GitHub 拉取最新修复版:
+'''Bash
+pip3 install git+[https://github.com/MXWXZ/sjtu-automata.git](https://github.com/MXWXZ/sjtu-automata.git) --upgrade --no-build-isolation
+```
 
 ### [可选]验证码自动识别
 Windows可以不装，Linux如无图形界面且无法通过其他方式打开`captcha.jpeg`文件需要安装。
