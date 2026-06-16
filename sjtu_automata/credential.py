@@ -1,6 +1,7 @@
 from time import sleep
 from time import time
 from getpass import getpass
+import re
 
 import requests
 from PIL import Image
@@ -57,7 +58,7 @@ def _bypass_captcha(session, url, useocr):
 def _login(session, sid, returl, se, client, username, password, code, uuid):
     # return 0 suc, 1 wrong credential, 2 code error, 3 30s ban
     data = {'sid': sid, 'returl': returl, 'se': se, 'client': client, 'user': username,
-            'pass': password, 'captcha': code, 'v': '', 'uuid': uuid}
+            'pass': password, 'captcha': code, 'v': '', 'uuid': uuid, 'lt': 'p'}
     req = session.post(
         'https://jaccount.sjtu.edu.cn/jaccount/ulogin', data=data)
 
@@ -69,6 +70,16 @@ def _login(session, sid, returl, se, client, username, password, code, uuid):
         error_msg = result.get('error', '')
 
         if errno == 0:
+            # Follow redirect URL to complete auth cookie setup
+            redirect_url = result.get('url', '')
+            if redirect_url:
+                # JAccount may return relative URL, make it absolute
+                if not redirect_url.startswith('http'):
+                    redirect_url = 'https://jaccount.sjtu.edu.cn' + redirect_url
+                try:
+                    session.get(redirect_url)
+                except RequestException:
+                    pass  # redirect failed but login POST succeeded, cookies are already set
             return 0  # login success
         if error_code == 'WRONG_CAPTCHA' or '验证码' in error_msg:
             return 2  # wrong captcha
@@ -90,8 +101,23 @@ def _login(session, sid, returl, se, client, username, password, code, uuid):
         return 3
     elif '<i class="fa fa-gear" aria-hidden="true" id="wdyy_szbtn">' in req.text:
         return 0
-    else:
-        raise AutomataError(f'Unexpected response, first 500 chars: {req.text[:500]}')
+
+    # Dump full response for debugging new JAccount page structure
+    with open('jaccount_response.html', 'w', encoding='utf-8') as f:
+        f.write(req.text)
+    print('[Debug] Full response written to jaccount_response.html')
+
+    # Check for common error indicators in newer JAccount pages
+    if 'errno' in req.text or 'error' in req.text:
+        err_match = re.search(r'"error"\s*:\s*"([^"]+)"', req.text)
+        if err_match:
+            raise AutomataError(f'JAccount error: {err_match.group(1)}')
+    if 'login-form' in req.text or 'login-card' in req.text or 'SJTU Single Sign On' in req.text:
+        # Returned to login page — likely captcha error, but could be wrong password.
+        # Return 2 to retry captcha; if it loops forever, the password is probably wrong.
+        print('[Debug] Returned to login page, retrying with new captcha...')
+        return 2
+    raise AutomataError(f'Unexpected response. Full HTML saved to jaccount_response.html. First 500 chars: {req.text[:500]}')
 
 
 def login(url, useocr=False):
@@ -134,8 +160,7 @@ def login(url, useocr=False):
                          username, password, code, uuid)
 
             if res == 2:
-                if not useocr:
-                    print('Wrong captcha! Try again!')
+                print('Wrong captcha! Retrying...')
                 continue
             elif res == 1:
                 print('Wrong username or password! Try again!')
