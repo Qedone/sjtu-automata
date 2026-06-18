@@ -30,7 +30,7 @@ Linux > macOS > Windows
 pip3 install requests
 ```
 2. 从 GitHub 拉取最新修复版:
-'''Bash
+```Bash
 pip3 install git+[https://github.com/MXWXZ/sjtu-automata.git](https://github.com/MXWXZ/sjtu-automata.git) --upgrade --no-build-isolation
 ```
 
@@ -49,9 +49,7 @@ macOS
 
 其他版本/发行版/Windows等自行看文档：https://github.com/tesseract-ocr/tesseract/wiki
     
-## 简单使用说明 & 避坑指南
-
-**注意：目前 pip 仓库的 0.4.0 版本已失效。请下载本仓库最新源码，并在本地运行！**
+## 简单使用说明
 
 - 由于选课系统再次更新，需要传递的参数改变，因此建议使用油猴脚本获取ID：https://www.tampermonkey.net/
 - 插件安装完成后点击这里进入脚本安装页面：https://github.com/MXWXZ/sjtu-automata/raw/master/sjtu-automata.user.js
